@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Drag and Drop File Upload</title>
+  <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.10.2/fullcalendar.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.10.2/fullcalendar.min.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: block;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    #main-container {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    #drop-area {
+      border: 2px dashed #ccc;
+      border-radius: 8px;
+      margin-left: 25%;
+      margin-right: 25%;
+      margin-top: 10%;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    #calendar {
+      margin-top: 20px;
+    }
+
+    #result {
+      margin-top: 20px;
+    }
+
+    #fileText {
+      margin-top: 10px;
+    }
+
+    #clearButton {
+      margin-top: 10px;
+      background-color: #ff6961;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    #exportBtn {
+      margin-top: 10px;
+      background-color: #254ebe;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    #submitBtn {
+      margin-top: 10px;
+      background-color: #4caf50;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    #startDateInput {
+      margin-top: 10px;
+      padding: 5px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="main-container">
+    <div id="drop-area">
+      <h3>Drag and Drop a .txt or .csv file here</h3>
+      <input type="file" id="fileInput" style="display: none" accept=".txt, .csv" />
+    </div>
+    <br />
+    <label for="timeRangeSelect">Select Time Range:</label>
+    <select id="timeRangeSelect">
+      <option value="set1">Eul, M (Mo-Fr)</option>
+      <option value="set2">BWL, SW (Mo-Fr) Bau, A(Mo-Fr)</option>
+    </select>
+    <br />
+    <input type="text" id="startDateInput" placeholder="Enter start date (YYYY-MM-DD)" />
+    <br />
+    <!-- Add username and password fields -->
+    <input type="text" id="usernameInput" placeholder="Enter username" value="administrator" />
+    <input type="password" id="passwordInput" placeholder="Enter password" value="openolat" />
+    <br />
+    <button id="clearButton" onclick="clearData()">Clear Data</button>
+    <button id="submitBtn" onclick="submitForm()">Submit</button>
+    <button id="exportBtn" onclick="exportToICal()">Export to iCal</button>
+    <button id="testBtn" onclick="getUsers()">Test Get Users</button>
+    <button id="testBtn" onclick="getCourses()">Test Get Courses</button>
+    <div id="calendar"></div>
+    <div id="result">
+      <h3>Upload Succeeded!</h3>
+      <p>Content of the file:</p>
+      <pre id="fileContent"></pre>
+    </div>
+  </div>
+</body>
+
+<script>
+  let data; // Global variable to store data
+  let icalLibraryLoaded = false;
+
+  const dropArea = document.getElementById("drop-area");
+  const fileInput = document.getElementById("fileInput");
+  const resultDiv = document.getElementById("result");
+  const fileContentDiv = document.getElementById("fileContent");
+  const startDateInput = document.getElementById("startDateInput");
+
+  dropArea.addEventListener("click", () => {
+    fileInput.click();
+  });
+
+  dropArea.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropArea.style.border = "2px dashed #4CAF50";
+  });
+
+  dropArea.addEventListener("dragleave", () => {
+    dropArea.style.border = "2px dashed #ccc";
+  });
+
+  dropArea.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropArea.style.border = "2px dashed #ccc";
+
+    const file = e.dataTransfer.files[0];
+
+    if (file && (file.type === "text/plain" || file.type === "text/csv")) {
+      readFile(file);
+    } else {
+      alert("Please upload a .txt or .csv file.");
+    }
+  });
+
+  fileInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    readFile(file);
+  });
+
+  function readFile(file) {
+    const reader = new FileReader();
+
+    reader.onload = function (e) {
+      const fileContent = e.target.result;
+      data = processData(fileContent);
+      displayResult(fileContent);
+    };
+
+    reader.readAsText(file);
+  }
+
+  function processData(content) {
+    // Split content by lines
+    const lines = content.split("\n");
+
+    // Process each line and create a list of objects
+    return lines.map((line) => {
+      const values = line
+        .split(",")
+        .map((item) => item.trim().replace(/"/g, ""));
+      return {
+        ID: values[0],
+        Fachbereich: values[1],
+        Professor: values[2],
+        Fach: values[3],
+        Raum: values[4],
+        Zeitraum: values[5],
+        Tag: values[6],
+      };
+    });
+  }
+
+  function testRequest() {
+    // Define the URL of the REST API endpoint
+    const apiUrl = "http://localhost:8088/restapi/";
+
+    // Make a GET request using fetch()
+    fetch(apiUrl)
+      .then((response) => {
+        // Check if the request was successful (status code 200)
+        if (!response.ok) {
+          throw new Error("Network response was not ok");
+        }
+        // Parse the JSON response
+        return response.json();
+      })
+      .then((data) => {
+        // Handle the JSON data
+        console.log(data);
+      })
+      .catch((error) => {
+        // Handle any errors that occurred during the fetch
+        console.error(
+          "There was a problem with the fetch operation:",
+          error
+        );
+      });
+  }
+
+  async function getUsers() {
+    try {
+      const username = document.getElementById("usernameInput").value;
+      const password = document.getElementById("passwordInput").value;
+
+      // Make a POST request to authenticate and get the bearer token
+      const tokenResponse = await fetch("http://localhost:3000/auth/" + username + "?password=" + password, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!tokenResponse.ok) {
+        throw new Error("Authentication failed");
+      }
+
+      const olatToken = await tokenResponse.text();
+      console.log(olatToken); // Print the returned string
+
+      // Use the bearer token for subsequent requests
+      const response = await fetch("http://localhost:3000/users", {
+        method: "GET",
+        headers: {
+          "X-OLAT-TOKEN": olatToken // Use consistent header name
+        }
+      });
+
+
+
+      if (response.ok) {
+        console.log("Response is ok");
+        console.log(response.json());
+      } else {
+        throw new Error("Failed to fetch users");
+      }
+    } catch (error) {
+      console.error("Error fetching users:", error);
+    }
+  }
+
+  async function getCourses(){
+    try {
+      const username = document.getElementById("usernameInput").value;
+      const password = document.getElementById("passwordInput").value;
+
+      // Make a POST request to authenticate and get the bearer token
+      const tokenResponse = await fetch("http://localhost:3000/auth/" + username + "?password=" + password, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (!tokenResponse.ok) {
+        throw new Error("Authentication failed");
+      }
+
+      const olatToken = await tokenResponse.text();
+      console.log(olatToken); // Print the returned string
+
+      // Use the bearer token for subsequent requests
+      const response = await fetch("http://localhost:3000/courses", {
+        method: "GET",
+        headers: {
+          "X-OLAT-TOKEN": olatToken // Use consistent header name
+        }
+      });
+
+      if (response.ok) {
+        console.log("Response is ok");
+        console.log(response.json());
+      } else {
+        throw new Error("Failed to fetch courses");
+      }
+    } catch (error) {
+      console.error("Error fetching courses:", error);
+    }
+  }
+
+  function submitForm() {
+    const startDateString = startDateInput.value;
+    const selectedTimeRange =
+      document.getElementById("timeRangeSelect").value;
+
+    if (startDateString) {
+      const startDate = moment(startDateString, "YYYY-MM-DD", true);
+
+      if (startDate.isValid()) {
+        renderCalendar(startDate, selectedTimeRange);
+      } else {
+        alert(
+          "Invalid date format. Please enter a valid date (YYYY-MM-DD)."
+        );
+      }
+    } else {
+      alert("Please enter a valid date (YYYY-MM-DD).");
+    }
+  }
+
+  function renderCalendar(startDate, selectedTimeRange) {
+    console.log(
+      "Rendering calendar with start date:",
+      startDate.format("YYYY-MM-DD")
+    );
+
+    const timeRangesSet1 = [
+      "8:15 - 9:45",
+      "10:00 - 11:30",
+      "12:15 - 13:45",
+      "14:00 - 15:30",
+      "15:45 - 17:15",
+    ];
+
+    const timeRangesSet2 = [
+      "8:15 - 9:45",
+      "10:00 - 11:30",
+      "11:45 - 13:15",
+      "14:00 - 15:30",
+      "15:45 - 17:15",
+    ];
+
+    const selectedTimeRanges =
+      selectedTimeRange === "set1" ? timeRangesSet1 : timeRangesSet2;
+
+    $("#calendar").fullCalendar({
+      header: {
+        left: "prev,next today",
+        center: "title",
+        right: "month,agendaWeek,agendaDay",
+      },
+      defaultDate: startDate.format("YYYY-MM-DD"),
+      events: getCalendarEvents(selectedTimeRanges),
+    });
+  }
+
+  function getCalendarEvents(selectedTimeRange) {
+    return data
+      .map((event) => {
+        // Check for missing or undefined values in the event
+        if (
+          !event.ID ||
+          !event.Fachbereich ||
+          !event.Professor ||
+          !event.Fach ||
+          !event.Raum ||
+          !event.Zeitraum ||
+          !event.Tag
+        ) {
+          console.warn(
+            "Skipping event with missing or undefined values:",
+            event
+          );
+          return null; // Skip events with missing or undefined values
+        }
+
+        // Check for missing or undefined values in the event
+        const requiredFields = [
+          "ID",
+          "Fachbereich",
+          "Professor",
+          "Fach",
+          "Raum",
+          "Zeitraum",
+          "Tag",
+        ];
+        if (requiredFields.some((field) => !event[field])) {
+          console.warn(
+            "Skipping event with missing or undefined values:",
+            event
+          );
+          return null; // Skip events with missing or undefined values
+        }
+
+        const dayIndex = parseInt(event.Tag); // Parse Tag as an integer
+        if (isNaN(dayIndex) || dayIndex < 1 || dayIndex > 7) {
+          console.warn("Invalid Tag value for event:", event);
+          return null; // Skip events with invalid Tag values
+        }
+
+        const timeRanges = selectedTimeRange;
+        // Assuming the Zeitraum property contains the index of the time range
+        const timeRangeIndex = parseInt(event.Zeitraum) - 1;
+        if (
+          isNaN(timeRangeIndex) ||
+          timeRangeIndex < 1 ||
+          timeRangeIndex > selectedTimeRange.length
+        ) {
+          console.warn("Invalid Zeitraum value for event:", event);
+          return null; // Skip events with invalid Zeitraum values
+        }
+
+        const timeRange = selectedTimeRange[timeRangeIndex];
+
+        console.log("timeRange:", timeRange); // Log the value
+
+        // Assuming the Zeitraum property contains the date
+        //TODO: Must be recheked
+        const eventStartDate = moment(
+          `${event.Zeitraum} ${timeRange ? timeRange.split(" - ")[0] : ""}`,
+          "YYYY-MM-DD HH:mm"
+        );
+        const eventEndDate = moment(
+          `${event.Zeitraum} ${timeRange ? timeRange.split(" - ")[1] : ""}`,
+          "YYYY-MM-DD HH:mm"
+        );
+
+        if (eventStartDate.isValid() && eventEndDate.isValid()) {
+          return {
+            id: event.ID,
+            title: `${event.Professor} - ${event.Raum} (${timeRange})`,
+            start: eventStartDate.format("YYYY-MM-DDTHH:mm:ss"),
+            end: eventEndDate.format("YYYY-MM-DDTHH:mm:ss"),
+            startTime: eventStartDate.format("HH:mm"), // Add startTime property
+            endTime: eventEndDate.format("HH:mm"), // Add endTime property
+          };
+        } else {
+          console.warn("Invalid date format for event:", event);
+          return null; // Skip events with invalid date formats
+        }
+      })
+      .filter((event) => event !== null); // Remove null entries
+  }
+  function getDayIndex(day) {
+    const daysOfWeek = [
+      "",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
+    return daysOfWeek.indexOf(day);
+  }
+
+  function displayResult() {
+    resultDiv.style.display = "block";
+    fileContentDiv.textContent = JSON.stringify(data, null, 2);
+  }
+
+  function clearData() {
+    resultDiv.style.display = "none";
+    fileContentDiv.textContent = "";
+    fileInput.value = ""; // Clear the file input
+    startDateInput.value = ""; // Clear the start date input
+    $("#calendar").fullCalendar("destroy");
+  }
+
+  // Export in iCal
+  function exportToICal() {
+    const calendarBegin = "BEGIN:VCALENDAR";
+    const calendarVersion = "VERSION:2.0";
+    const calendarProdId = "PRODID:-//HS-Koblenz//OlatCalendar//EN";
+    const calendarEnd = "END:VCALENDAR";
+
+    const selectedTimeRange =
+      document.getElementById("timeRangeSelect").value;
+    const events = getCalendarEvents(selectedTimeRange);
+
+    const eventStrings = events.map((event) => {
+      const eventBegin = "BEGIN:VEVENT";
+      const eventUid = `UID:${event.id}`;
+      const eventSummary = `SUMMARY:${event.title}`;
+      const eventDescription = "DESCRIPTION:Your event description here";
+      const eventLocation = `LOCATION:${event.title}`;
+      const eventStart = `DTSTART;TZID=YourTimeZone:${event.start}`;
+      const eventEnd = `DTEND;TZID=YourTimeZone:${event.end}`;
+      const eventEndReminder =
+        "BEGIN:VALARM\nTRIGGER:-PT15M\nACTION:DISPLAY\nDESCRIPTION:Reminder\nEND:VALARM";
+      const eventEndReminder2 =
+        "BEGIN:VALARM\nTRIGGER:-PT1H\nACTION:DISPLAY\nDESCRIPTION:Reminder\nEND:VALARM";
+      const eventEndReminder3 =
+        "BEGIN:VALARM\nTRIGGER:-P1D\nACTION:DISPLAY\nDESCRIPTION:Reminder\nEND:VALARM";
+      const eventClose = "END:VEVENT\n";
+
+      return [
+        eventBegin,
+        eventUid,
+        eventSummary,
+        eventDescription,
+        eventLocation,
+        eventStart,
+        eventEnd,
+        eventEndReminder,
+        eventEndReminder2,
+        eventEndReminder3,
+        eventClose,
+      ].join("\n");
+    });
+
+    const icalString = [
+      calendarBegin,
+      calendarVersion,
+      calendarProdId,
+      ...eventStrings,
+      calendarEnd,
+    ].join("\n");
+
+    // Create a Blob from the string
+    const blob = new Blob([icalString], {
+      type: "text/calendar;charset=utf-8",
+    });
+
+    // Create a link element
+    const link = document.createElement("a");
+
+    // Set the href attribute with the Blob data
+    link.href = window.URL.createObjectURL(blob);
+
+    // Set the download attribute with the desired file name
+    link.download = "calendar.ics";
+
+    // Append the link to the document
+    document.body.appendChild(link);
+
+    // Trigger a click event on the link to start the download
+    link.click();
+
+    // Remove the link from the document
+    document.body.removeChild(link);
+  }
+</script>
+</body>
+
+</html>
